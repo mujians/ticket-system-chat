@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ticket-system
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ticket-system-db
+          property: connectionString
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      - key: ADMIN_URL
+        generateValue: https://${{RENDER_SERVICE_NAME}}.onrender.com/admin
+      - key: ALLOWED_ORIGINS
+        generateValue: https://${{RENDER_SERVICE_NAME}}.onrender.com
+
+databases:
+  - name: ticket-system-db
+    databaseName: tickets
+    user: tickets_user

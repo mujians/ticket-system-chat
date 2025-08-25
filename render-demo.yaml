@@ -1,0 +1,35 @@
+services:
+  # Demo service with in-memory storage (no database needed)
+  - type: web
+    name: ticket-system-demo
+    env: node
+    buildCommand: npm install
+    startCommand: node demo-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Email Configuration (Optional - per le notifiche)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@example.com
+      - key: FROM_EMAIL
+        value: tickets@example.com
+      # WhatsApp Configuration (Optional - per le notifiche)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      # URLs
+      - key: ADMIN_URL
+        generateValue: https://${{RENDER_SERVICE_NAME}}.onrender.com/admin
+      - key: CHAT_URL
+        generateValue: https://${{RENDER_SERVICE_NAME}}.onrender.com
+      - key: ALLOWED_ORIGINS
+        generateValue: https://${{RENDER_SERVICE_NAME}}.onrender.com

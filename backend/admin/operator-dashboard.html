@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💬 Dashboard Operatore</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 300px 1fr 350px;
+            grid-template-rows: 60px 1fr;
+            grid-template-areas: 
+                "header header header"
+                "sidebar main chat";
+            height: 100vh;
+        }
+        
+        .header {
+            grid-area: header;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+        
+        .status-dot.offline { background: #dc3545; box-shadow: 0 0 10px rgba(220, 53, 69, 0.5); }
+        .status-dot.busy { background: #ffc107; box-shadow: 0 0 10px rgba(255, 193, 7, 0.5); }
+        
+        .sidebar {
+            grid-area: sidebar;
+            background: white;
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+        }
+        
+        .main-content {
+            grid-area: main;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-panel {
+            grid-area: chat;
+            background: white;
+            border-left: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #f1f3f4;
+        }
+        
+        .sidebar-section h3 {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .queue-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .queue-item {
+            padding: 12px;
+            border-bottom: 1px solid #f1f3f4;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .queue-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .queue-item.priority-high {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .queue-item.priority-urgent {
+            border-left: 4px solid #ff6b6b;
+            background: #fff5f5;
+        }
+        
+        .queue-customer {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .queue-question {
+            font-size: 0.85rem;
+            color: #666;
+            margin: 5px 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .queue-meta {
+            font-size: 0.75rem;
+            color: #999;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #1e7e34; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-sm { padding: 4px 8px; font-size: 0.8rem; }
+        
+        .active-chats {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .chat-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .chat-item.active {
+            border-color: #007bff;
+            background: #e3f2fd;
+        }
+        
+        .chat-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .chat-customer {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .chat-duration {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        
+        .chat-preview {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        
+        .chat-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-window {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header-panel {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fff;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message.customer {
+            align-items: flex-end;
+        }
+        
+        .message.operator {
+            align-items: flex-start;
+        }
+        
+        .message.system {
+            align-items: center;
+        }
+        
+        .message-bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        
+        .message.customer .message-bubble {
+            background: #007bff;
+            color: white;
+        }
+        
+        .message.operator .message-bubble {
+            background: #e9ecef;
+            color: #333;
+        }
+        
+        .message.system .message-bubble {
+            background: #fff3cd;
+            color: #856404;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+        
+        .message-meta {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid #e9ecef;
+            background: white;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-group textarea {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            padding: 12px 20px;
+            resize: none;
+            font-family: inherit;
+            max-height: 100px;
+            min-height: 50px;
+        }
+        
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .send-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: #0056b3;
+        }
+        
+        .send-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            padding: 10px 20px;
+            font-style: italic;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+            text-align: center;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 10px;
+        }
+        
+        .connection-status {
+            padding: 10px 20px;
+            background: #d4edda;
+            color: #155724;
+            border-bottom: 1px solid #c3e6cb;
+            text-align: center;
+        }
+        
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border-bottom-color: #f5c6cb;
+        }
+        
+        @media (max-width: 1200px) {
+            .dashboard {
+                grid-template-columns: 250px 1fr;
+                grid-template-areas: 
+                    "header header"
+                    "sidebar main";
+            }
+            .chat-panel { display: none; }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                grid-template-areas: 
+                    "header"
+                    "main";
+            }
+            .sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>💬 Dashboard Operatore</h1>
+            <div class="status-indicator">
+                <div class="status-dot offline" id="statusDot"></div>
+                <span id="statusText">Disconnesso</span>
+                <button class="btn btn-sm" id="toggleStatusBtn" onclick="toggleOnlineStatus()">Vai Online</button>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h3>Statistiche</h3>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-number" id="activeChats">0</div>
+                        <div class="stat-label">Chat Attive</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="todayResolved">0</div>
+                        <div class="stat-label">Risolte Oggi</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="inQueue">0</div>
+                        <div class="stat-label">In Coda</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="avgDuration">0</div>
+                        <div class="stat-label">Min Medi</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Coda di Attesa</h3>
+                <div class="queue-list" id="queueList">
+                    <div class="empty-state">
+                        <p>Nessuna richiesta in coda</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="connection-status disconnected" id="connectionStatus">
+                🔴 Disconnesso dal server
+            </div>
+            
+            <div class="active-chats" id="activeChats">
+                <div class="empty-state">
+                    <h3>👋 Benvenuto!</h3>
+                    <p>Vai online per iniziare a ricevere chat</p>
+                    <button class="btn" onclick="toggleOnlineStatus()">Vai Online</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-panel" id="chatPanel">
+            <div class="empty-state">
+                <h3>💬 Nessuna Chat Selezionata</h3>
+                <p>Seleziona una chat dalla lista per iniziare</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class OperatorDashboard {
+            constructor() {
+                this.socket = null;
+                this.operatorId = this.getOperatorId();
+                this.operatorName = this.getOperatorName();
+                this.isOnline = false;
+                this.currentChatId = null;
+                this.activeSessions = new Map();
+                this.typingTimeouts = new Map();
+
+                this.initializeSocket();
+                this.setupEventListeners();
+            }
+
+            getOperatorId() {
+                // In produzione, questo dovrebbe venire dall'autenticazione
+                let operatorId = localStorage.getItem('operatorId');
+                if (!operatorId) {
+                    operatorId = prompt('Inserisci il tuo ID operatore:');
+                    if (operatorId) {
+                        localStorage.setItem('operatorId', operatorId);
+                    }
+                }
+                return operatorId;
+            }
+
+            getOperatorName() {
+                let operatorName = localStorage.getItem('operatorName');
+                if (!operatorName) {
+                    operatorName = prompt('Inserisci il tuo nome:');
+                    if (operatorName) {
+                        localStorage.setItem('operatorName', operatorName);
+                    }
+                }
+                return operatorName;
+            }
+
+            initializeSocket() {
+                this.socket = io();
+
+                this.socket.on('connect', () => {
+                    console.log('Connesso al server');
+                    this.updateConnectionStatus(true);
+                    
+                    if (this.operatorId) {
+                        this.socket.emit('operator:connect', {
+                            operatorId: this.operatorId,
+                            name: this.operatorName
+                        });
+                    }
+                });
+
+                this.socket.on('disconnect', () => {
+                    console.log('Disconnesso dal server');
+                    this.updateConnectionStatus(false);
+                    this.isOnline = false;
+                    this.updateStatusIndicator();
+                });
+
+                this.socket.on('operator:connected', (data) => {
+                    console.log('Operatore connesso:', data);
+                    this.isOnline = true;
+                    this.updateStatusIndicator();
+                });
+
+                this.socket.on('system:stats', (stats) => {
+                    this.updateSystemStats(stats);
+                });
+
+                this.socket.on('queue:new_session', (data) => {
+                    this.loadQueueList();
+                    this.playNotificationSound();
+                });
+
+                this.socket.on('chat:new_message', (message) => {
+                    this.handleNewMessage(message);
+                });
+
+                this.socket.on('customer:connected', (data) => {
+                    console.log('Cliente connesso:', data);
+                });
+
+                this.socket.on('customer:disconnected', (data) => {
+                    console.log('Cliente disconnesso:', data);
+                });
+
+                this.socket.on('chat:typing', (data) => {
+                    this.handleTypingIndicator(data);
+                });
+
+                this.socket.on('error', (error) => {
+                    console.error('Errore WebSocket:', error);
+                    alert('Errore: ' + error.message);
+                });
+
+                // Heartbeat per mantenere la connessione
+                setInterval(() => {
+                    if (this.socket && this.socket.connected && this.operatorId) {
+                        this.socket.emit('heartbeat', { operatorId: this.operatorId });
+                    }
+                }, 30000);
+            }
+
+            setupEventListeners() {
+                // Auto-resize textarea
+                document.addEventListener('input', (e) => {
+                    if (e.target.matches('textarea')) {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = e.target.scrollHeight + 'px';
+                    }
+                });
+
+                // Send message on Enter
+                document.addEventListener('keypress', (e) => {
+                    if (e.target.matches('#messageInput') && e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                // Typing indicator
+                let typingTimer;
+                document.addEventListener('input', (e) => {
+                    if (e.target.matches('#messageInput') && this.currentChatId) {
+                        this.socket.emit('chat:typing', { sessionId: this.currentChatId, isTyping: true });
+                        
+                        clearTimeout(typingTimer);
+                        typingTimer = setTimeout(() => {
+                            this.socket.emit('chat:typing', { sessionId: this.currentChatId, isTyping: false });
+                        }, 1000);
+                    }
+                });
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusElement.className = 'connection-status';
+                    statusElement.textContent = '🟢 Connesso al server';
+                } else {
+                    statusElement.className = 'connection-status disconnected';
+                    statusElement.textContent = '🔴 Disconnesso dal server';
+                }
+            }
+
+            updateStatusIndicator() {
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+                const toggleBtn = document.getElementById('toggleStatusBtn');
+
+                if (this.isOnline) {
+                    statusDot.className = 'status-dot';
+                    statusText.textContent = 'Online';
+                    toggleBtn.textContent = 'Vai Offline';
+                    toggleBtn.className = 'btn btn-sm btn-danger';
+                } else {
+                    statusDot.className = 'status-dot offline';
+                    statusText.textContent = 'Offline';
+                    toggleBtn.textContent = 'Vai Online';
+                    toggleBtn.className = 'btn btn-sm btn-success';
+                }
+            }
+
+            updateSystemStats(stats) {
+                document.getElementById('activeChats').textContent = stats.active_chats || 0;
+                document.getElementById('todayResolved').textContent = stats.today_resolved || 0;
+                document.getElementById('inQueue').textContent = stats.in_queue || 0;
+                document.getElementById('avgDuration').textContent = 
+                    stats.avg_wait_minutes ? Math.round(stats.avg_wait_minutes) : 0;
+            }
+
+            async loadQueueList() {
+                try {
+                    // In un'implementazione reale, questo dovrebbe essere un endpoint API
+                    // Per ora mostriamo un placeholder
+                    const queueList = document.getElementById('queueList');
+                    queueList.innerHTML = '<div class="empty-state"><p>Caricamento coda...</p></div>';
+                } catch (err) {
+                    console.error('Errore caricamento coda:', err);
+                }
+            }
+
+            playNotificationSound() {
+                // Suono di notifica per nuove chat
+                if ('Audio' in window) {
+                    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBjiS1/LNeSsFJXfH8N2QQAoUXrTp66hVFApGn+PaqmQdBg==');
+                    audio.play().catch(() => {});
+                }
+            }
+
+            handleNewMessage(message) {
+                if (message.session_id === this.currentChatId) {
+                    this.appendMessageToChat(message);
+                    this.scrollChatToBottom();
+                }
+                
+                // Update chat preview in sidebar
+                this.updateChatPreview(message.session_id, message);
+            }
+
+            handleTypingIndicator(data) {
+                if (data.sessionId === this.currentChatId) {
+                    const typingEl = document.getElementById('typingIndicator');
+                    if (typingEl) {
+                        if (data.isTyping && data.senderType === 'customer') {
+                            typingEl.textContent = 'Il cliente sta scrivendo...';
+                            typingEl.style.display = 'block';
+                        } else {
+                            typingEl.style.display = 'none';
+                        }
+                    }
+                }
+            }
+
+            appendMessageToChat(message) {
+                const messagesContainer = document.getElementById('chatMessages');
+                if (!messagesContainer) return;
+
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${message.sender_type}`;
+                
+                const time = new Date(message.created_at).toLocaleTimeString();
+                const sender = message.sender_type === 'customer' ? 'Cliente' : 
+                              message.sender_type === 'operator' ? 'Tu' : 'Sistema';
+
+                messageEl.innerHTML = `
+                    <div class="message-meta">${sender} - ${time}</div>
+                    <div class="message-bubble">${message.message}</div>
+                `;
+
+                messagesContainer.appendChild(messageEl);
+            }
+
+            scrollChatToBottom() {
+                const messagesContainer = document.getElementById('chatMessages');
+                if (messagesContainer) {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+
+            sendMessage() {
+                const input = document.getElementById('messageInput');
+                if (!input || !this.currentChatId) return;
+
+                const message = input.value.trim();
+                if (!message) return;
+
+                this.socket.emit('chat:message', {
+                    sessionId: this.currentChatId,
+                    message: message,
+                    messageType: 'text'
+                });
+
+                input.value = '';
+                input.style.height = 'auto';
+            }
+
+            updateChatPreview(sessionId, lastMessage) {
+                // Update the chat item in the main content area
+                // Implementation would depend on how the active chats are displayed
+            }
+        }
+
+        // Global functions
+        function toggleOnlineStatus() {
+            if (window.dashboard.isOnline) {
+                window.dashboard.socket.emit('operator:disconnect', { 
+                    operatorId: window.dashboard.operatorId 
+                });
+                window.dashboard.isOnline = false;
+            } else {
+                window.dashboard.socket.emit('operator:connect', {
+                    operatorId: window.dashboard.operatorId,
+                    name: window.dashboard.operatorName
+                });
+            }
+            window.dashboard.updateStatusIndicator();
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.dashboard = new OperatorDashboard();
+        });
+    </script>
+</body>
+</html>

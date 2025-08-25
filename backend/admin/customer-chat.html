@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💬 Assistenza Live</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .chat-container {
+            width: 100%;
+            max-width: 400px;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .chat-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .chat-subtitle {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .status-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #28a745;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+        
+        .status-dot.queue { background: #ffc107; }
+        .status-dot.offline { background: #dc3545; }
+        
+        .queue-info {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #ffeaa7;
+        }
+        
+        .queue-info.hidden { display: none; }
+        
+        .queue-position {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .queue-time {
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message.customer {
+            align-items: flex-end;
+        }
+        
+        .message.operator {
+            align-items: flex-start;
+        }
+        
+        .message.system {
+            align-items: center;
+        }
+        
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            position: relative;
+        }
+        
+        .message.customer .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 8px;
+        }
+        
+        .message.operator .message-bubble {
+            background: white;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-bottom-left-radius: 8px;
+        }
+        
+        .message.system .message-bubble {
+            background: #e3f2fd;
+            color: #1976d2;
+            font-style: italic;
+            font-size: 0.9rem;
+            border-radius: 12px;
+        }
+        
+        .message-time {
+            font-size: 0.75rem;
+            color: #999;
+            margin: 5px 10px;
+        }
+        
+        .typing-indicator {
+            padding: 10px 20px;
+            font-style: italic;
+            color: #666;
+            font-size: 0.9rem;
+            background: white;
+            border-top: 1px solid #f1f3f4;
+        }
+        
+        .typing-indicator.hidden { display: none; }
+        
+        .chat-input-container {
+            background: white;
+            border-top: 1px solid #f1f3f4;
+            padding: 20px;
+        }
+        
+        .chat-input-container.disabled {
+            background: #f8f9fa;
+            opacity: 0.7;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        
+        .input-group textarea {
+            flex: 1;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            padding: 12px 20px;
+            resize: none;
+            font-family: inherit;
+            max-height: 100px;
+            min-height: 50px;
+            background: #f8f9fa;
+            transition: all 0.2s;
+        }
+        
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+        }
+        
+        .input-group textarea:disabled {
+            background: #e9ecef;
+            cursor: not-allowed;
+        }
+        
+        .send-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 1.2rem;
+        }
+        
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .send-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .connection-status {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #d4edda;
+            color: #155724;
+            text-align: center;
+            padding: 8px;
+            font-size: 0.8rem;
+            z-index: 10;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+        }
+        
+        .connection-status.show {
+            transform: translateY(0);
+        }
+        
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .welcome-screen.hidden { display: none; }
+        
+        .welcome-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        
+        .welcome-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .welcome-text {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .start-chat-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .start-chat-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .chat-ended {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .chat-ended.hidden { display: none; }
+        
+        .ended-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #28a745;
+        }
+        
+        .ended-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .ended-text {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .new-chat-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .new-chat-btn:hover {
+            background: #1e7e34;
+            transform: translateY(-1px);
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 60%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            80% { transform: translateY(-5px); }
+        }
+        
+        .bounce { animation: bounce 2s infinite; }
+        
+        @media (max-width: 480px) {
+            .chat-container {
+                height: 100vh;
+                max-width: 100%;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="connection-status disconnected" id="connectionStatus">
+            🔴 Connessione in corso...
+        </div>
+
+        <div class="chat-header">
+            <div class="status-indicator">
+                <div class="status-dot offline" id="statusDot"></div>
+                <span id="statusText">Offline</span>
+            </div>
+            <div class="chat-title">Assistenza Live</div>
+            <div class="chat-subtitle" id="subtitle">Chat dal vivo con i nostri operatori</div>
+        </div>
+
+        <div class="queue-info hidden" id="queueInfo">
+            <div class="queue-position">Posizione in coda: <span id="queuePosition">-</span></div>
+            <div class="queue-time">Tempo stimato: <span id="queueTime">-</span> minuti</div>
+        </div>
+
+        <!-- Welcome Screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+            <div class="welcome-icon bounce">👋</div>
+            <div class="welcome-title">Ciao! Come possiamo aiutarti?</div>
+            <div class="welcome-text">
+                Il nostro chatbot non è riuscito a rispondere alla tua domanda.<br>
+                Vuoi parlare con un operatore?
+            </div>
+            <button class="start-chat-btn" onclick="startChat()">
+                💬 Parla con un Operatore
+            </button>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="chat-messages hidden" id="chatMessages"></div>
+        
+        <div class="typing-indicator hidden" id="typingIndicator">
+            L'operatore sta scrivendo...
+        </div>
+
+        <div class="chat-input-container hidden disabled" id="chatInput">
+            <div class="input-group">
+                <textarea 
+                    id="messageInput" 
+                    placeholder="Scrivi il tuo messaggio..."
+                    disabled
+                    rows="1"
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                    📤
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Ended Screen -->
+        <div class="chat-ended hidden" id="chatEnded">
+            <div class="ended-icon">✅</div>
+            <div class="ended-title">Chat Terminata</div>
+            <div class="ended-text">
+                Grazie per aver utilizzato il nostro servizio!<br>
+                Hai altre domande?
+            </div>
+            <button class="new-chat-btn" onclick="location.reload()">
+                🔄 Nuova Chat
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class CustomerChat {
+            constructor() {
+                this.socket = null;
+                this.sessionId = null;
+                this.userId = this.getUserId();
+                this.userEmail = this.getUserEmail();
+                this.userPhone = this.getUserPhone();
+                this.initialQuestion = this.getInitialQuestion();
+                this.isConnected = false;
+                this.chatStarted = false;
+
+                this.initializeSocket();
+                this.setupEventListeners();
+            }
+
+            getUserId() {
+                return localStorage.getItem('userId') || 
+                       'user_' + Math.random().toString(36).substr(2, 9);
+            }
+
+            getUserEmail() {
+                return localStorage.getItem('userEmail') || 
+                       prompt('Inserisci la tua email per ricevere aggiornamenti:') || '';
+            }
+
+            getUserPhone() {
+                return localStorage.getItem('userPhone') || '';
+            }
+
+            getInitialQuestion() {
+                return localStorage.getItem('initialQuestion') || 
+                       'Ho bisogno di assistenza';
+            }
+
+            initializeSocket() {
+                this.socket = io();
+
+                this.socket.on('connect', () => {
+                    console.log('Connesso al server');
+                    this.updateConnectionStatus(true);
+                });
+
+                this.socket.on('disconnect', () => {
+                    console.log('Disconnesso dal server');
+                    this.updateConnectionStatus(false);
+                });
+
+                this.socket.on('session:joined', (data) => {
+                    console.log('Sessione joinata:', data);
+                    this.handleSessionJoined(data);
+                });
+
+                this.socket.on('session:operator_assigned', (data) => {
+                    console.log('Operatore assegnato:', data);
+                    this.handleOperatorAssigned();
+                });
+
+                this.socket.on('chat:operator_joined', (data) => {
+                    console.log('Operatore entrato in chat:', data);
+                    this.handleOperatorJoined(data);
+                });
+
+                this.socket.on('chat:new_message', (message) => {
+                    this.handleNewMessage(message);
+                });
+
+                this.socket.on('chat:typing', (data) => {
+                    this.handleTypingIndicator(data);
+                });
+
+                this.socket.on('chat:ended', (data) => {
+                    console.log('Chat terminata:', data);
+                    this.handleChatEnded(data);
+                });
+
+                this.socket.on('session:escalated', (data) => {
+                    console.log('Sessione escalata:', data);
+                    this.handleSessionEscalated(data);
+                });
+
+                this.socket.on('queue:position', (data) => {
+                    this.updateQueueInfo(data);
+                });
+
+                this.socket.on('error', (error) => {
+                    console.error('Errore WebSocket:', error);
+                    this.showSystemMessage('Si è verificato un errore: ' + error.message);
+                });
+            }
+
+            setupEventListeners() {
+                // Auto-resize textarea
+                document.getElementById('messageInput').addEventListener('input', (e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                });
+
+                // Send message on Enter
+                document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                // Typing indicator
+                let typingTimer;
+                document.getElementById('messageInput').addEventListener('input', () => {
+                    if (this.sessionId && this.chatStarted) {
+                        this.socket.emit('chat:typing', { sessionId: this.sessionId, isTyping: true });
+                        
+                        clearTimeout(typingTimer);
+                        typingTimer = setTimeout(() => {
+                            this.socket.emit('chat:typing', { sessionId: this.sessionId, isTyping: false });
+                        }, 1000);
+                    }
+                });
+
+                // Heartbeat to keep connection alive
+                setInterval(() => {
+                    if (this.socket && this.socket.connected) {
+                        this.socket.emit('heartbeat', { userId: this.userId });
+                    }
+                }, 30000);
+            }
+
+            async startChat() {
+                try {
+                    // Richiesta operatore tramite API
+                    const response = await fetch('/api/chat/request-operator', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_id: this.userId,
+                            user_email: this.userEmail,
+                            user_phone: this.userPhone,
+                            question: this.initialQuestion,
+                            priority: 'medium'
+                        })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.sessionId = result.session_id;
+                        
+                        // Join websocket session
+                        this.socket.emit('customer:join_session', {
+                            sessionId: this.sessionId,
+                            userId: this.userId
+                        });
+
+                        // Hide welcome screen
+                        document.getElementById('welcomeScreen').classList.add('hidden');
+                        document.getElementById('chatMessages').classList.remove('hidden');
+                        document.getElementById('chatInput').classList.remove('hidden');
+
+                        if (result.type === 'queue') {
+                            this.showQueueInfo(result.position, result.estimated_wait);
+                            this.showSystemMessage(`Sei in posizione ${result.position} nella coda. ${result.message}`);
+                        } else if (result.type === 'operator_assigned') {
+                            this.showSystemMessage(result.message);
+                        }
+
+                    } else {
+                        alert('Errore: ' + result.message);
+                    }
+
+                } catch (err) {
+                    console.error('Errore avvio chat:', err);
+                    alert('Errore di connessione. Riprova più tardi.');
+                }
+            }
+
+            handleSessionJoined(data) {
+                this.updateStatus('In coda', 'queue');
+                
+                if (data.position) {
+                    this.showQueueInfo(data.position, data.estimatedWait);
+                }
+            }
+
+            handleOperatorAssigned() {
+                this.updateStatus('Operatore assegnato', 'queue');
+                this.showSystemMessage('Un operatore ti sta contattando...');
+            }
+
+            handleOperatorJoined(data) {
+                this.chatStarted = true;
+                this.updateStatus('Chat attiva', 'online');
+                this.hideQueueInfo();
+                this.enableInput();
+                
+                this.showSystemMessage(`${data.operatorName} è entrato nella chat. Ciao! Come posso aiutarti?`);
+            }
+
+            handleNewMessage(message) {
+                this.appendMessage(message);
+                this.scrollToBottom();
+            }
+
+            handleTypingIndicator(data) {
+                const typingEl = document.getElementById('typingIndicator');
+                
+                if (data.senderType === 'operator' && data.isTyping) {
+                    typingEl.classList.remove('hidden');
+                } else {
+                    typingEl.classList.add('hidden');
+                }
+            }
+
+            handleChatEnded(data) {
+                this.chatStarted = false;
+                this.updateStatus('Chat terminata', 'offline');
+                this.disableInput();
+                
+                document.getElementById('chatMessages').classList.add('hidden');
+                document.getElementById('chatInput').classList.add('hidden');
+                document.getElementById('chatEnded').classList.remove('hidden');
+                
+                this.showSystemMessage(data.message || 'La chat è stata terminata.');
+            }
+
+            handleSessionEscalated(data) {
+                this.chatStarted = false;
+                this.updateStatus('Ticket creato', 'offline');
+                this.disableInput();
+                
+                this.showSystemMessage(data.message);
+            }
+
+            sendMessage() {
+                const input = document.getElementById('messageInput');
+                const message = input.value.trim();
+                
+                if (!message || !this.sessionId) return;
+
+                this.socket.emit('chat:message', {
+                    sessionId: this.sessionId,
+                    message: message,
+                    messageType: 'text'
+                });
+
+                input.value = '';
+                input.style.height = 'auto';
+            }
+
+            appendMessage(message) {
+                const messagesContainer = document.getElementById('chatMessages');
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${message.sender_type}`;
+                
+                const time = new Date(message.created_at).toLocaleTimeString();
+                const isCustomer = message.sender_type === 'customer';
+                const isSystem = message.sender_type === 'system';
+                
+                messageEl.innerHTML = `
+                    <div class="message-bubble">${message.message}</div>
+                    <div class="message-time">${time}</div>
+                `;
+
+                messagesContainer.appendChild(messageEl);
+                this.scrollToBottom();
+            }
+
+            showSystemMessage(text) {
+                const messagesContainer = document.getElementById('chatMessages');
+                if (!messagesContainer) return;
+
+                const messageEl = document.createElement('div');
+                messageEl.className = 'message system';
+                messageEl.innerHTML = `
+                    <div class="message-bubble">${text}</div>
+                    <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                `;
+
+                messagesContainer.appendChild(messageEl);
+                this.scrollToBottom();
+            }
+
+            scrollToBottom() {
+                const container = document.getElementById('chatMessages');
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusEl = document.getElementById('connectionStatus');
+                
+                if (connected) {
+                    statusEl.className = 'connection-status show';
+                    statusEl.textContent = '🟢 Connesso';
+                    setTimeout(() => statusEl.classList.remove('show'), 2000);
+                } else {
+                    statusEl.className = 'connection-status disconnected show';
+                    statusEl.textContent = '🔴 Connessione persa - Riconnessione...';
+                }
+            }
+
+            updateStatus(text, type) {
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+                const subtitle = document.getElementById('subtitle');
+
+                statusDot.className = `status-dot ${type}`;
+                statusText.textContent = text;
+                
+                const subtitles = {
+                    'online': 'Connesso con un operatore',
+                    'queue': 'In attesa di un operatore...',
+                    'offline': 'Chat non disponibile'
+                };
+                
+                subtitle.textContent = subtitles[type] || text;
+            }
+
+            showQueueInfo(position, estimatedWait) {
+                const queueInfo = document.getElementById('queueInfo');
+                const queuePosition = document.getElementById('queuePosition');
+                const queueTime = document.getElementById('queueTime');
+
+                queuePosition.textContent = position;
+                queueTime.textContent = estimatedWait || '5';
+                queueInfo.classList.remove('hidden');
+            }
+
+            hideQueueInfo() {
+                document.getElementById('queueInfo').classList.add('hidden');
+            }
+
+            updateQueueInfo(data) {
+                if (data.sessionId === this.sessionId) {
+                    this.showQueueInfo(data.position, data.estimatedWait);
+                }
+            }
+
+            enableInput() {
+                const input = document.getElementById('messageInput');
+                const sendBtn = document.getElementById('sendBtn');
+                const container = document.getElementById('chatInput');
+
+                input.disabled = false;
+                sendBtn.disabled = false;
+                container.classList.remove('disabled');
+                input.placeholder = 'Scrivi il tuo messaggio...';
+            }
+
+            disableInput() {
+                const input = document.getElementById('messageInput');
+                const sendBtn = document.getElementById('sendBtn');
+                const container = document.getElementById('chatInput');
+
+                input.disabled = true;
+                sendBtn.disabled = true;
+                container.classList.add('disabled');
+                input.placeholder = 'Chat terminata';
+            }
+        }
+
+        // Global functions
+        function startChat() {
+            window.customerChat.startChat();
+        }
+
+        function sendMessage() {
+            window.customerChat.sendMessage();
+        }
+
+        // Initialize chat when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get initial question from URL params or chatbot
+            const urlParams = new URLSearchParams(window.location.search);
+            const question = urlParams.get('question');
+            const email = urlParams.get('email');
+            const phone = urlParams.get('phone');
+
+            if (question) localStorage.setItem('initialQuestion', question);
+            if (email) localStorage.setItem('userEmail', email);
+            if (phone) localStorage.setItem('userPhone', phone);
+
+            window.customerChat = new CustomerChat();
+        });
+    </script>
+</body>
+</html>
