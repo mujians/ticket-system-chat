@@ -389,11 +389,10 @@
             <div class="welcome-icon bounce">👋</div>
             <div class="welcome-title">Ciao! Come possiamo aiutarti?</div>
             <div class="welcome-text">
-                Il nostro chatbot non è riuscito a rispondere alla tua domanda.<br>
-                Vuoi parlare con un operatore?
+                Scrivi la tua domanda e ti aiuteremo a trovare la soluzione migliore.
             </div>
-            <button class="start-chat-btn" onclick="startChat()">
-                💬 Parla con un Operatore
+            <button class="start-chat-btn" onclick="showChatInterface()">
+                💬 Inizia Chat
             </button>
         </div>
 
@@ -404,16 +403,21 @@
             L'operatore sta scrivendo...
         </div>
 
-        <div class="chat-input-container hidden disabled" id="chatInput">
+        <div class="chat-input-container hidden" id="chatInput">
             <div class="input-group">
                 <textarea 
                     id="messageInput" 
                     placeholder="Scrivi il tuo messaggio..."
-                    disabled
                     rows="1"
+                    onkeypress="handleKeyPress(event)"
                 ></textarea>
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                     📤
+                </button>
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <button class="start-chat-btn" onclick="chatApp.startChat()" style="font-size: 0.9rem; padding: 10px 20px;">
+                    👨‍💼 Richiedi Operatore
                 </button>
             </div>
         </div>
@@ -557,6 +561,22 @@
                         this.socket.emit('heartbeat', { userId: this.userId });
                     }
                 }, 30000);
+            }
+
+            showChatInterface() {
+                // Mostra interfaccia chat senza fare escalation
+                document.getElementById('welcomeScreen').classList.add('hidden');
+                document.getElementById('chatMessages').classList.remove('hidden');
+                document.getElementById('chatInput').classList.remove('hidden');
+                
+                // Messaggio di benvenuto
+                this.showSystemMessage("👋 Scrivi la tua domanda. Se non riusciremo a risponderti, ti metteremo in contatto con un operatore!");
+                
+                // Focus sul campo input
+                setTimeout(() => {
+                    const input = document.getElementById('messageInput');
+                    if (input) input.focus();
+                }, 100);
             }
 
             async startChat() {
@@ -831,7 +851,34 @@
             if (phone) localStorage.setItem('userPhone', phone);
 
             window.customerChat = new CustomerChat();
+            window.chatApp = window.customerChat; // Alias per compatibilità
         });
+        
+        // Global functions
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Mostra messaggio utente
+            window.customerChat.showUserMessage(message);
+            
+            // Reset input
+            input.value = '';
+            
+            // Simula risposta (in produzione qui ci sarebbe la logica del bot o escalation)
+            setTimeout(() => {
+                window.customerChat.showSystemMessage("📝 Ho ricevuto il tuo messaggio. Usa il pulsante 'Richiedi Operatore' per escalare ad assistenza umana.");
+            }, 500);
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
     </script>
 </body>
 </html>
