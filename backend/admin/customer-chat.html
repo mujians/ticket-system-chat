@@ -577,24 +577,30 @@
                     const result = await response.json();
                     
                     if (result.success) {
-                        this.sessionId = result.session_id;
-                        
-                        // Join websocket session
-                        this.socket.emit('customer:join_session', {
-                            sessionId: this.sessionId,
-                            userId: this.userId
-                        });
-
                         // Hide welcome screen
                         document.getElementById('welcomeScreen').classList.add('hidden');
                         document.getElementById('chatMessages').classList.remove('hidden');
                         document.getElementById('chatInput').classList.remove('hidden');
 
-                        if (result.type === 'queue') {
+                        if (result.type === 'ticket_created') {
+                            this.showSystemMessage(`✅ ${result.message}`);
+                            this.showSystemMessage(`Ticket ID: #${result.ticket_id}`);
+                            this.disableChatInput("Ticket creato - Riceverai risposta via email");
+                        } else if (result.type === 'operator_assigned') {
+                            this.sessionId = result.session_id;
+                            this.socket.emit('customer:join_session', {
+                                sessionId: this.sessionId,
+                                userId: this.userId
+                            });
+                            this.showSystemMessage(result.message);
+                        } else if (result.type === 'queue') {
+                            this.sessionId = result.session_id;
+                            this.socket.emit('customer:join_session', {
+                                sessionId: this.sessionId,
+                                userId: this.userId
+                            });
                             this.showQueueInfo(result.position, result.estimated_wait);
                             this.showSystemMessage(`Sei in posizione ${result.position} nella coda. ${result.message}`);
-                        } else if (result.type === 'operator_assigned') {
-                            this.showSystemMessage(result.message);
                         }
 
                     } else {
@@ -718,6 +724,16 @@
                 if (container) {
                     container.scrollTop = container.scrollHeight;
                 }
+            }
+
+            disableChatInput(message) {
+                const inputGroup = document.getElementById('chatInput');
+                const messageInput = document.getElementById('messageInput');
+                const sendButton = document.getElementById('sendButton');
+                
+                if (messageInput) messageInput.disabled = true;
+                if (sendButton) sendButton.disabled = true;
+                if (messageInput) messageInput.placeholder = message;
             }
 
             updateConnectionStatus(connected) {
